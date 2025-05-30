@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, RefObject } from 'react';
 import { HabitTitle } from './HabitTitle';
 import { HabitSquareRow } from './HabitSquareRow';
 import { HabitStreak } from './HabitStreak';
@@ -14,9 +14,11 @@ export interface HabitProps {
   streak: number;
   days: HabitDay[];
   gradient: string;
+  scrollRef: RefObject<HTMLDivElement>;
+  onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
-export const Habit: React.FC<HabitProps> = ({ name, streak: initialStreak, days: initialDays, gradient }) => {
+export const Habit: React.FC<HabitProps> = ({ name, streak: initialStreak, days: initialDays, gradient, scrollRef, onScroll }) => {
   const [days, setDays] = useState<HabitDay[]>(initialDays);
   const [streak, setStreak] = useState(initialStreak);
 
@@ -78,7 +80,7 @@ export const Habit: React.FC<HabitProps> = ({ name, streak: initialStreak, days:
   return (
     <div className="flex flex-col items-end relative self-stretch w-full flex-[0_0_auto]">
       <div className="relative w-full h-11">
-        <HabitSquareRow days={days} onSquareClick={handleSquareClick} />
+        <HabitSquareRow days={days} onSquareClick={handleSquareClick} scrollRef={scrollRef} onScroll={onScroll} />
         <HabitTitle name={name} gradient={gradient} />
       </div>
       <HabitStreak streak={streak} />
