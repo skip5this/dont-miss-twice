@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect, MouseEvent } from "react";
 import { Button } from "../../components/ui/button";
 import { Habit, HabitProps } from "../../components/Habit";
 import { HabitSquareRow } from "../../components/HabitSquareRow";
@@ -24,7 +24,7 @@ export const HabitTracker = (): JSX.Element => {
     });
   };
 
-  const generateDates = (daysToShow: number = 30): Day[] => {
+  const generateDates = (daysToShow: number = 60): Day[] => {
     const today = new Date();
     const days = [];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -101,6 +101,40 @@ export const HabitTracker = (): JSX.Element => {
     },
   ];
 
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handleMouseDown = (e: MouseEvent) => {
+    if (!dateBarRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - dateBarRef.current.offsetLeft);
+    setScrollLeft(dateBarRef.current.scrollLeft);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging || !dateBarRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - dateBarRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5; // Scroll speed multiplier
+    dateBarRef.current.scrollLeft = scrollLeft - walk;
+    syncScroll(dateBarRef.current);
+  };
+
+  useEffect(() => {
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseleave', handleMouseUp);
+    
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseleave', handleMouseUp);
+    };
+  }, []);
+
   return (
     <div className="bg-[#1a1a1a] flex flex-row justify-center items-center w-full min-h-screen">
       <div className="bg-[#111111] overflow-hidden w-[390px] h-[844px] rounded-3xl">
@@ -166,7 +200,7 @@ export const HabitTracker = (): JSX.Element => {
                 <section className="flex flex-col items-end gap-8 relative self-stretch w-full flex-[0_0_auto]">
                   <div className="flex flex-col items-start gap-7 relative self-stretch w-full flex-[0_0_auto]">
                     {/* Calendar header */}
-                    <div className="flex flex-col items-end gap-1 self-stretch w-full relative flex-[0_0_auto]">
+                    <div className="flex flex-col items-end gap-1 self-stretch w-full relative flex-[0_0_auto] overflow-hidden">
                       <div className="flex items-start justify-between self-stretch w-full relative flex-[0_0_auto]">
                         {months.map((month, index) => (
                           <div
@@ -181,25 +215,33 @@ export const HabitTracker = (): JSX.Element => {
                       </div>
 
                       {/* Calendar days */}
-                      <div className="inline-flex items-center justify-end mb-[-1.00px] ml-[-43.00px] mr-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto]">
-                        {days.map((day, index) => (
-                          <div
-                            key={index}
-                            className={`flex flex-col w-12 h-11 items-start justify-center px-0 py-1 relative border-r-[0.5px] [border-right-style:solid] border-l-[0.5px] [border-left-style:solid] border-[#3d3d3d70] ${day.isActive ? "bg-darklayersecondary" : ""}`}
-                          >
+                      <div 
+                        ref={dateBarRef}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        className="flex overflow-x-auto overflow-y-hidden scrollbar-hide cursor-grab active:cursor-grabbing w-full select-none scroll-smooth"
+                      >
+                        <div className="inline-flex items-center justify-start mb-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto] min-w-max">
+                          {days.map((day, index) => (
                             <div
-                              className={`relative self-stretch font-caption font-[number:var(--caption-font-weight)] ${day.isActive ? "text-darkfaceprimary" : "text-darkfacesecondary"} text-[length:var(--caption-font-size)] text-center tracking-[var(--caption-letter-spacing)] leading-[var(--caption-line-height)] [font-style:var(--caption-font-style)]`}
+                              key={index}
+                              className={`flex flex-col w-12 h-11 items-start justify-center px-0 py-1 relative border-r-[0.5px] [border-right-style:solid] border-l-[0.5px] [border-left-style:solid] border-[#3d3d3d70] ${day.isActive ? "bg-darklayersecondary" : ""} select-none`}
                             >
-                              {day.day}
-                            </div>
+                              <div
+                                className={`relative self-stretch font-caption font-[number:var(--caption-font-weight)] ${day.isActive ? "text-darkfaceprimary" : "text-darkfacesecondary"} text-[length:var(--caption-font-size)] text-center tracking-[var(--caption-letter-spacing)] leading-[var(--caption-line-height)] [font-style:var(--caption-font-style)]`}
+                              >
+                                {day.day}
+                              </div>
 
-                            <div
-                              className={`self-stretch font-subheadline-02 font-[number:var(--subheadline-02-font-weight)] ${day.isActive ? "text-darkfaceprimary" : "text-darkfacesecondary"} text-[length:var(--subheadline-02-font-size)] text-center leading-[var(--subheadline-02-line-height)] relative tracking-[var(--subheadline-02-letter-spacing)] [font-style:var(--subheadline-02-font-style)]`}
-                            >
-                              {day.date}
+                              <div
+                                className={`self-stretch font-subheadline-02 font-[number:var(--subheadline-02-font-weight)] ${day.isActive ? "text-darkfaceprimary" : "text-darkfacesecondary"} text-[length:var(--subheadline-02-font-size)] text-center leading-[var(--subheadline-02-line-height)] relative tracking-[var(--subheadline-02-letter-spacing)] [font-style:var(--subheadline-02-font-style)]`}
+                              >
+                                {day.date}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     </div>
 
