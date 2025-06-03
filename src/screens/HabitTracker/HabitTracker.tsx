@@ -1,7 +1,14 @@
 import React, { useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
-import { Habit, HabitProps } from "../../components/Habit";
-import { HabitSquareRow } from "../../components/HabitSquareRow";
+import { Habit } from "../../components/Habit";
+import { DateHeader } from "../../components/DateHeader";
+
+interface Day {
+  day: string;
+  date: string;
+  isActive?: boolean;
+  fullDate: Date;
+}
 
 export const HabitTracker = (): JSX.Element => {
   // Refs for date bar and each habit row
@@ -17,46 +24,61 @@ export const HabitTracker = (): JSX.Element => {
     });
   };
 
-  // Calendar data
-  const months = [
-    { name: "May", position: "left" },
-    { name: "Jun", position: "right" },
-  ];
+  const generateDates = (daysToShow: number = 30): Day[] => {
+    const today = new Date();
+    const days = [];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    
+    // Start from daysToShow days ago
+    for (let i = daysToShow - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
+      
+      days.push({
+        day: dayNames[date.getDay()],
+        date: date.getDate().toString(),
+        isActive: i === 0, // Today is active
+        fullDate: date
+      });
+    }
+    
+    return days;
+  };
 
-  const days = [
-    { day: "Sun", date: "25" },
-    { day: "Mon", date: "26" },
-    { day: "Tue", date: "27" },
-    { day: "Wed", date: "28" },
-    { day: "Thur", date: "29" },
-    { day: "Fri", date: "30" },
-    { day: "Sat", date: "31" },
-    { day: "Sun", date: "1" },
-    { day: "Mon", date: "2", isActive: true },
-  ];
+  // Calendar data
+  const days = generateDates();
+
+  // Get current month names for the header
+  const months = Array.from(new Set(days.map(day => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return {
+      name: monthNames[day.fullDate.getMonth()],
+      position: day.fullDate.getDate() <= 15 ? "left" : "right"
+    };
+  }))).slice(0, 2);
 
   // Habit data
   const habits = [
     {
       name: "Meditate",
       streak: 200,
-      days: Array(18).fill({ completed: true }),
+      days: Array(30).fill({ completed: true }),
       gradient: "from-purple-500/60 to-blue-500/60",
     },
     {
       name: "Walk 7500 Steps",
       streak: 200,
-      days: [
-        { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: false, dot: true }, { completed: false, dot: true }, { completed: false, dot: true }, { completed: true }, { completed: false, outline: true }, { completed: true },
-      ],
+      days: Array(30).fill({ completed: true }).map((day, index) => 
+        index >= 27 ? { ...day, completed: false, dot: index < 29, outline: index === 29 } : day
+      ),
       gradient: "from-purple-500/60 to-blue-500/60",
     },
     {
       name: "Stretch",
       streak: 200,
-      days: [
-        { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: true }, { completed: false, outline: true }, { completed: true }, { completed: true }, { completed: true },
-      ],
+      days: Array(30).fill({ completed: true }).map((day, index) => 
+        index === 28 ? { ...day, completed: false, outline: true } : day
+      ),
       gradient: "from-purple-500/60 to-blue-500/60",
     },
   ];
@@ -109,16 +131,7 @@ export const HabitTracker = (): JSX.Element => {
                         ))}
                       </div>
                       {/* Calendar days */}
-                      <div ref={dateBarRef} className="overflow-x-auto no-scrollbar cursor-grab active:cursor-grabbing" onScroll={e => syncScroll(e.currentTarget)}>
-                        <div className="inline-flex items-center justify-end mb-[-1.00px] mr-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto]">
-                          {days.map((day, index) => (
-                            <div key={index} className={`flex flex-col w-12 h-11 items-start justify-center px-0 py-1 relative border-r-[0.5px] [border-right-style:solid] border-l-[0.5px] [border-left-style:solid] border-[#3d3d3d70] ${day.isActive ? "bg-darklayersecondary" : ""}`}>
-                              <div className={`relative self-stretch font-caption font-[number:var(--caption-font-weight)] ${day.isActive ? "text-darkfaceprimary" : "text-darkfacesecondary"} text-[length:var(--caption-font-size)] text-center tracking-[var(--caption-letter-spacing)] leading-[var(--caption-line-height)] [font-style:var(--caption-font-style)]`}>{day.day}</div>
-                              <div className={`self-stretch font-subheadline-02 font-[number:var(--subheadline-02-font-weight)] ${day.isActive ? "text-darkfaceprimary" : "text-darkfacesecondary"} text-[length:var(--subheadline-02-font-size)] text-center leading-[var(--subheadline-02-line-height)] relative tracking-[var(--subheadline-02-letter-spacing)] [font-style:var(--subheadline-02-font-style)]`}>{day.date}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <DateHeader days={days} scrollRef={dateBarRef} onScroll={e => syncScroll(e.currentTarget)} />
                     </div>
                     {/* Habits */}
                     {habits.map((habit, index) => (
