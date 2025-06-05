@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, MouseEvent } from "react";
+import React, { useRef, useState, useEffect, MouseEvent, useCallback } from "react";
 import { Button } from "../../components/ui/button";
 import { Habit, HabitProps } from "../../components/Habit";
 import { HabitSquareRow } from "../../components/HabitSquareRow";
@@ -10,10 +10,34 @@ interface Day {
   fullDate: Date;
 }
 
+interface MonthPosition {
+  name: string;
+  startIndex: number;
+}
+
+// Debounce helper
+const debounce = <T extends (...args: any[]) => void>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: number;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
+
 export const HabitTracker = (): JSX.Element => {
   // Refs for date bar and each habit row
   const dateBarRef = useRef<HTMLDivElement>(null);
   const habitRowRefs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
+  
+  // State for days and loading state
+  const [days, setDays] = useState<Day[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const DAYS_PER_BATCH = 60;
+  const SCROLL_THRESHOLD = 100; // pixels from start to trigger load
+  const [visibleMonth, setVisibleMonth] = useState<string>("");
 
   // Sync scrollLeft for all refs
   const syncScroll = (source: HTMLDivElement) => {
@@ -24,38 +48,153 @@ export const HabitTracker = (): JSX.Element => {
     });
   };
 
-  const generateDates = (daysToShow: number = 60): Day[] => {
-    const today = new Date();
-    const days = [];
+  const generateDates = (startDate: Date, daysToAdd: number): Day[] => {
+    const newDays = [];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
-    // Start from daysToShow days ago
-    for (let i = daysToShow - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(today.getDate() - i);
+    for (let i = daysToAdd - 1; i >= 0; i--) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() - i);
       
-      days.push({
+      newDays.push({
         day: dayNames[date.getDay()],
         date: date.getDate().toString(),
-        isActive: i === 0, // Today is active
+        isActive: false,
         fullDate: date
       });
     }
     
-    return days;
+    return newDays;
   };
 
-  // Calendar data
-  const days = generateDates();
+  // Initialize first batch of dates
+  useEffect(() => {
+    const today = new Date();
+    const initialDays = generateDates(today, DAYS_PER_BATCH);
+    initialDays[initialDays.length - 1].isActive = true; // Mark today as active
+    setDays(initialDays);
+  }, []);
 
-  // Get current month names for the header
-  const months = Array.from(new Set(days.map(day => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return {
-      name: monthNames[day.fullDate.getMonth()],
-      position: day.fullDate.getDate() <= 15 ? "left" : "right"
+  // Load more dates when scrolling near start
+  const loadMoreDates = useCallback(() => {
+    if (!dateBarRef.current || isLoading || !days.length) return;
+
+    const { scrollLeft } = dateBarRef.current;
+    
+    // Only load more if we're very close to the start
+    if (scrollLeft < SCROLL_THRESHOLD) {
+      setIsLoading(true);
+
+      // Calculate the start date for the new batch
+      const oldestDate = days[0].fullDate;
+      const startDate = new Date(oldestDate);
+      startDate.setDate(oldestDate.getDate() - DAYS_PER_BATCH);
+
+      // Generate and add new dates
+      const newDays = generateDates(startDate, DAYS_PER_BATCH);
+      
+      // Get current scroll position before adding new content
+      const currentScroll = dateBarRef.current.scrollLeft;
+      const newContentWidth = DAYS_PER_BATCH * 48; // 48px per date column
+
+      // Combine new and existing days
+      setDays(prevDays => [...newDays, ...prevDays]);
+
+      // Adjust scroll position after new content is added
+      requestAnimationFrame(() => {
+        if (dateBarRef.current) {
+          dateBarRef.current.scrollLeft = currentScroll + newContentWidth;
+          syncScroll(dateBarRef.current);
+        }
+        setIsLoading(false);
+      });
+    }
+  }, [days, isLoading]);
+
+  // Update visible month based on scroll position
+  const updateVisibleMonth = useCallback(() => {
+    if (dateBarRef.current) {
+      const scrollLeft = dateBarRef.current.scrollLeft;
+      const columnWidth = 48; // width of each date column
+      const leftMargin = 16; // UI consistent left margin
+      
+      // Calculate which date's left edge is at the 16px margin point
+      const dateIndexAtMargin = Math.floor((scrollLeft + leftMargin) / columnWidth);
+      
+      if (days[dateIndexAtMargin]) {
+        const currentDate = days[dateIndexAtMargin].fullDate;
+        // If this is the first day of a month, use its month
+        // Otherwise use the previous visible date's month
+        const monthToShow = currentDate.getDate() === 1 ? 
+          currentDate : 
+          days[Math.max(0, dateIndexAtMargin - 1)].fullDate;
+        
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const month = monthNames[monthToShow.getMonth()];
+        setVisibleMonth(month);
+      }
+    }
+  }, [days]);
+
+  // Update month on scroll
+  const handleScroll = useCallback(
+    debounce(() => {
+      loadMoreDates();
+      updateVisibleMonth();
+    }, 150),
+    [loadMoreDates, updateVisibleMonth]
+  );
+
+  // Initialize visible month
+  useEffect(() => {
+    if (days.length > 0) {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const month = monthNames[days[0].fullDate.getMonth()];
+      setVisibleMonth(month);
+    }
+  }, [days]);
+
+  useEffect(() => {
+    const dateBar = dateBarRef.current;
+    if (dateBar) {
+      dateBar.addEventListener('scroll', handleScroll);
+      return () => dateBar.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handleMouseDown = (e: MouseEvent) => {
+    if (!dateBarRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - dateBarRef.current.offsetLeft);
+    setScrollLeft(dateBarRef.current.scrollLeft);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging || !dateBarRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - dateBarRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5; // Scroll speed multiplier
+    dateBarRef.current.scrollLeft = scrollLeft - walk;
+    syncScroll(dateBarRef.current);
+  };
+
+  useEffect(() => {
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseleave', handleMouseUp);
+    
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseleave', handleMouseUp);
     };
-  }))).slice(0, 2);
+  }, []);
 
   // Habit data
   const habits: HabitProps[] = [
@@ -100,40 +239,6 @@ export const HabitTracker = (): JSX.Element => {
       gradient: "from-purple-500/60 to-blue-500/60",
     },
   ];
-
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
-
-  const handleMouseDown = (e: MouseEvent) => {
-    if (!dateBarRef.current) return;
-    setIsDragging(true);
-    setStartX(e.pageX - dateBarRef.current.offsetLeft);
-    setScrollLeft(dateBarRef.current.scrollLeft);
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging || !dateBarRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - dateBarRef.current.offsetLeft;
-    const walk = (x - startX) * 1.5; // Scroll speed multiplier
-    dateBarRef.current.scrollLeft = scrollLeft - walk;
-    syncScroll(dateBarRef.current);
-  };
-
-  useEffect(() => {
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('mouseleave', handleMouseUp);
-    
-    return () => {
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('mouseleave', handleMouseUp);
-    };
-  }, []);
 
   return (
     <div className="bg-[#1a1a1a] flex flex-row justify-center items-center w-full min-h-screen">
@@ -201,28 +306,19 @@ export const HabitTracker = (): JSX.Element => {
                   <div className="flex flex-col items-start gap-7 relative self-stretch w-full flex-[0_0_auto]">
                     {/* Calendar header */}
                     <div className="flex flex-col items-end gap-1 self-stretch w-full relative flex-[0_0_auto] overflow-hidden">
-                      <div className="flex items-start justify-between self-stretch w-full relative flex-[0_0_auto]">
-                        {months.map((month, index) => (
-                          <div
-                            key={index}
-                            className={`inline-flex items-center gap-2 ${month.position === "left" ? "px-4" : ""} py-0 relative flex-[0_0_auto] ${month.position === "right" ? "w-[96.68px]" : "w-[52px]"}`}
-                          >
-                            <div className="mt-[-1.00px] font-caption font-[number:var(--caption-font-weight)] text-darkfacesecondary text-[length:var(--caption-font-size)] leading-[var(--caption-line-height)] relative tracking-[var(--caption-letter-spacing)] [font-style:var(--caption-font-style)]">
-                              {month.name}
-                            </div>
-                          </div>
-                        ))}
+                      {/* Visible Month Display */}
+                      <div className="absolute top-0 left-4 text-darkfaceprimary text-xl font-medium z-10">
+                        {visibleMonth}
                       </div>
-
-                      {/* Calendar days */}
+                      
                       <div 
                         ref={dateBarRef}
                         onMouseDown={handleMouseDown}
                         onMouseMove={handleMouseMove}
                         onMouseUp={handleMouseUp}
-                        className="flex overflow-x-auto overflow-y-hidden scrollbar-hide cursor-grab active:cursor-grabbing w-full select-none scroll-smooth"
+                        className="flex overflow-x-auto overflow-y-hidden scrollbar-hide cursor-grab active:cursor-grabbing w-full select-none relative [scroll-behavior:smooth] [-webkit-overflow-scrolling:touch]"
                       >
-                        <div className="inline-flex items-center justify-start mb-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto] min-w-max">
+                        <div className="inline-flex items-center justify-start mb-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto] min-w-max pt-8">
                           {days.map((day, index) => (
                             <div
                               key={index}
