@@ -35,7 +35,7 @@ export const HabitTracker = (): JSX.Element => {
   // State for days and loading state
   const [days, setDays] = useState<Day[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const DAYS_PER_BATCH = 60;
+  const DAYS_PER_BATCH = 90;
   const SCROLL_THRESHOLD = 100; // pixels from start to trigger load
   const [visibleMonth, setVisibleMonth] = useState<string>("");
 
@@ -48,19 +48,24 @@ export const HabitTracker = (): JSX.Element => {
     });
   };
 
-  const generateDates = (startDate: Date, daysToAdd: number): Day[] => {
+  const generateDates = (endDate: Date, daysToAdd: number): Day[] => {
     const newDays = [];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
-    for (let i = daysToAdd - 1; i >= 0; i--) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() - i);
+    // Calculate start date by subtracting daysToAdd from end date
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (daysToAdd - 1));
+    
+    // Generate dates from start to end
+    for (let i = 0; i < daysToAdd; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(startDate.getDate() + i);
       
       newDays.push({
-        day: dayNames[date.getDay()],
-        date: date.getDate().toString(),
-        isActive: false,
-        fullDate: date
+        day: dayNames[currentDate.getDay()],
+        date: currentDate.getDate().toString(),
+        isActive: i === daysToAdd - 1, // Last date is active (today)
+        fullDate: currentDate
       });
     }
     
@@ -71,8 +76,23 @@ export const HabitTracker = (): JSX.Element => {
   useEffect(() => {
     const today = new Date();
     const initialDays = generateDates(today, DAYS_PER_BATCH);
-    initialDays[initialDays.length - 1].isActive = true; // Mark today as active
     setDays(initialDays);
+
+    // Position scroll after a brief delay to ensure DOM is ready
+    setTimeout(() => {
+      if (dateBarRef.current) {
+        dateBarRef.current.style.scrollBehavior = 'auto';
+        dateBarRef.current.scrollLeft = dateBarRef.current.scrollWidth;
+        syncScroll(dateBarRef.current);
+        
+        // Re-enable smooth scrolling for user interactions
+        setTimeout(() => {
+          if (dateBarRef.current) {
+            dateBarRef.current.style.scrollBehavior = 'smooth';
+          }
+        }, 0);
+      }
+    }, 0);
   }, []);
 
   // Load more dates when scrolling near start
@@ -318,7 +338,7 @@ export const HabitTracker = (): JSX.Element => {
                         onMouseUp={handleMouseUp}
                         className="flex overflow-x-auto overflow-y-hidden scrollbar-hide cursor-grab active:cursor-grabbing w-full select-none relative [scroll-behavior:smooth] [-webkit-overflow-scrolling:touch]"
                       >
-                        <div className="inline-flex items-center justify-start mb-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto] min-w-max pt-8">
+                        <div className="inline-flex items-center justify-start mb-[-1.00px] border-b [border-bottom-style:solid] border-[#3d3d3d70] relative flex-[0_0_auto] min-w-max pt-6">
                           {days.map((day, index) => (
                             <div
                               key={index}
