@@ -307,7 +307,7 @@ export const HabitTracker = (): JSX.Element => {
                     {/* Calendar header */}
                     <div className="flex flex-col items-end gap-1 self-stretch w-full relative flex-[0_0_auto] overflow-hidden">
                       {/* Visible Month Display */}
-                      <div className="absolute top-0 left-4 text-darkfaceprimary text-xl font-medium z-10">
+                      <div className="absolute top-0 left-4 text-darkfaceprimary text-base font-medium z-10">
                         {visibleMonth}
                       </div>
                       
